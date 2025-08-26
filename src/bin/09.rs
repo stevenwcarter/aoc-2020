@@ -55,7 +55,6 @@ pub fn find_largest_bounded_values(sequence: &[u64], bad_value: u64) -> (u64, u6
 
     for index in 0..sequence.len() {
         if let Some((start, end, length)) = find_bounded_values(&sequence[index..], bad_value) {
-            println!("Found {start} {end} {length}");
             if length > longest {
                 first = start;
                 last = end;

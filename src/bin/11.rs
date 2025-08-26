@@ -77,21 +77,13 @@ impl Grid {
         *self.next_positions.get_mut(index).unwrap() = position_type;
     }
     pub fn get_adjacent_occupancies_count(&self, x: i32, y: i32) -> usize {
-        [
-            (x - 1, y - 1),
-            (x - 1, y),
-            (x - 1, y + 1),
-            (x, y - 1),
-            (x, y + 1),
-            (x + 1, y - 1),
-            (x + 1, y),
-            (x + 1, y + 1),
-        ]
-        .iter()
-        .filter_map(|(x, y)| self.get_index_checked(*x, *y))
-        .map(|index| self.get_type_at_index(index))
-        .filter(|&&position_type| matches!(position_type, PositionType::Occupied))
-        .count()
+        DIRECTIONS
+            .iter()
+            .map(|(dir_x, dir_y)| (x + dir_x, y + dir_y))
+            .filter_map(|(x, y)| self.get_index_checked(x, y))
+            .map(|index| self.get_type_at_index(index))
+            .filter(|&&position_type| matches!(position_type, PositionType::Occupied))
+            .count()
     }
     pub fn get_adjacent_occupancies_count_2(&self, x: i32, y: i32) -> usize {
         // TODO: get first seat upward, first seat diagonal up right, etc.
