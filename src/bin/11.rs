@@ -42,23 +42,21 @@ impl Grid {
 
         Some(y as usize * self.width + x as usize)
     }
-    fn get_first_seat_index_in_direction(
+    fn get_first_seat_in_direction(
         &self,
         dir_x: i32,
         dir_y: i32,
         x: i32,
         y: i32,
-    ) -> Option<usize> {
+    ) -> Option<PositionType> {
         let (new_x, new_y) = (x + dir_x, y + dir_y);
 
         let index = self.get_index_checked(new_x, new_y)?;
 
         match self.get_type_at_index(index) {
-            PositionType::Occupied => Some(index),
-            PositionType::Empty => Some(index),
-            PositionType::Floor => {
-                self.get_first_seat_index_in_direction(dir_x, dir_y, new_x, new_y)
-            }
+            PositionType::Occupied => Some(PositionType::Occupied),
+            PositionType::Empty => Some(PositionType::Empty),
+            PositionType::Floor => self.get_first_seat_in_direction(dir_x, dir_y, new_x, new_y),
         }
     }
     pub fn get_pos(&self, x: usize, y: usize) -> &PositionType {
@@ -99,11 +97,8 @@ impl Grid {
         // TODO: get first seat upward, first seat diagonal up right, etc.
         DIRECTIONS
             .iter()
-            .filter_map(|(dir_x, dir_y)| {
-                self.get_first_seat_index_in_direction(*dir_x, *dir_y, x, y)
-            })
-            .map(|index| self.get_type_at_index(index))
-            .filter(|&&position_type| matches!(position_type, PositionType::Occupied))
+            .filter_map(|(dir_x, dir_y)| self.get_first_seat_in_direction(*dir_x, *dir_y, x, y))
+            .filter(|&position_type| matches!(position_type, PositionType::Occupied))
             .count()
     }
     pub fn append(&mut self, position_type: PositionType) {
