@@ -11,6 +11,13 @@ const DIRECTIONS: [(i32, i32); 8] = [
     (1, 1),
 ];
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PositionType {
+    Occupied,
+    Empty,
+    Floor,
+}
+
 #[derive(Clone, Debug)]
 pub struct Grid {
     positions: Vec<PositionType>,
@@ -82,7 +89,7 @@ impl Grid {
             .map(|(dir_x, dir_y)| (x + dir_x, y + dir_y))
             .filter_map(|(x, y)| self.get_index_checked(x, y))
             .map(|index| self.get_type_at_index(index))
-            .filter(|&&position_type| matches!(position_type, PositionType::Occupied))
+            .filter(|&&position_type| position_type == PositionType::Occupied)
             .count()
     }
     pub fn get_adjacent_occupancies_count_2(&self, x: i32, y: i32) -> usize {
@@ -90,7 +97,7 @@ impl Grid {
         DIRECTIONS
             .iter()
             .filter_map(|(dir_x, dir_y)| self.get_first_seat_in_direction(*dir_x, *dir_y, x, y))
-            .filter(|&position_type| matches!(position_type, PositionType::Occupied))
+            .filter(|&position_type| position_type == PositionType::Occupied)
             .count()
     }
     pub fn append(&mut self, position_type: PositionType) {
@@ -100,7 +107,7 @@ impl Grid {
     pub fn count_occupied(&self) -> usize {
         self.positions
             .iter()
-            .filter(|p| matches!(p, PositionType::Occupied))
+            .filter(|&&p| p == PositionType::Occupied)
             .count()
     }
     // returns changed state count
@@ -166,13 +173,6 @@ impl Grid {
 
         None
     }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum PositionType {
-    Occupied,
-    Empty,
-    Floor,
 }
 
 pub fn part_one(input: &str) -> Option<usize> {
