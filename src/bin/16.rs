@@ -23,6 +23,62 @@ pub struct Data {
     pub other_tickets: Vec<Ticket>,
 }
 
+impl Data {
+    /// Whether `value` is valid for at least one attribute.
+    fn is_valid_value(&self, value: u32) -> bool {
+        self.attributes.iter().any(|a| a.contains(value))
+    }
+
+    /// Works out which ticket position each attribute occupies: `result[i]` is the position
+    /// of `attributes[i]`.
+    fn attribute_positions(&self) -> Vec<usize> {
+        let valid_tickets: Vec<&Ticket> = self
+            .other_tickets
+            .iter()
+            .filter(|t| t.iter().all(|&v| self.is_valid_value(v)))
+            .collect();
+        let width = self.your_ticket.len();
+        assert!(width <= 64, "tickets should have at most 64 fields");
+
+        // Per attribute, a bitmask of the positions whose values all fit that attribute.
+        let mut candidates: Vec<u64> = self
+            .attributes
+            .iter()
+            .map(|a| {
+                (0..width)
+                    .filter(|&pos| valid_tickets.iter().all(|t| a.contains(t[pos])))
+                    .fold(0, |mask, pos| mask | 1 << pos)
+            })
+            .collect();
+
+        // Repeatedly pin down an attribute with a single remaining candidate and remove that
+        // position from every attribute (which also zeroes the pinned attribute's own mask).
+        let mut positions = vec![0; candidates.len()];
+        for _ in 0..candidates.len() {
+            let index = candidates
+                .iter()
+                .position(|c| c.count_ones() == 1)
+                .expect("some attribute should have exactly one candidate position");
+            let mask = candidates[index];
+            positions[index] = mask.trailing_zeros() as usize;
+            for c in &mut candidates {
+                *c &= !mask;
+            }
+        }
+        positions
+    }
+
+    /// Multiplies the values on your ticket for every attribute whose name starts with `prefix`.
+    fn your_ticket_product(&self, prefix: &str) -> u64 {
+        self.attributes
+            .iter()
+            .zip(self.attribute_positions())
+            .filter(|(a, _)| a.name.starts_with(prefix))
+            .map(|(_, pos)| u64::from(self.your_ticket[pos]))
+            .product()
+    }
+}
+
 /// Parses a range like `1-3`.
 fn parse_range(range: &str) -> RangeInclusive<u32> {
     let (min, max) = range
@@ -90,20 +146,19 @@ fn parse_input(input: &str) -> Data {
 
 pub fn part_one(input: &str) -> Option<u32> {
     let data = parse_input(input);
-    let is_invalid = |value: &u32| !data.attributes.iter().any(|a| a.contains(*value));
 
     Some(
         data.other_tickets
             .iter()
             .flatten()
             .copied()
-            .filter(is_invalid)
+            .filter(|&value| !data.is_valid_value(value))
             .sum(),
     )
 }
 
-pub fn part_two(_input: &str) -> Option<u64> {
-    None
+pub fn part_two(input: &str) -> Option<u64> {
+    Some(parse_input(input).your_ticket_product("departure"))
 }
 
 #[cfg(test)]
@@ -116,9 +171,24 @@ mod tests {
         assert_eq!(result, Some(71));
     }
 
+    fn part_two_example() -> Data {
+        parse_input(&advent_of_code::template::read_file_part(
+            "examples", DAY, 2,
+        ))
+    }
+
     #[test]
-    fn test_part_two() {
-        let result = part_two(&advent_of_code::template::read_file("examples", DAY));
-        assert_eq!(result, None);
+    fn test_attribute_positions() {
+        // Attributes are `class`, `row`, `seat`; the ticket order is `row`, `class`, `seat`.
+        assert_eq!(part_two_example().attribute_positions(), vec![1, 0, 2]);
+    }
+
+    #[test]
+    fn test_your_ticket_product() {
+        let data = part_two_example();
+        assert_eq!(data.your_ticket_product("class"), 12);
+        assert_eq!(data.your_ticket_product("row"), 11);
+        // An empty prefix matches every attribute.
+        assert_eq!(data.your_ticket_product(""), 11 * 12 * 13);
     }
 }
