@@ -1,245 +1,69 @@
-use hashbrown::HashSet;
+use hashbrown::{HashMap, HashSet};
 
 advent_of_code::solution!(17);
 
-fn return_neighbors_for_coord(x: isize, y: isize, z: isize) -> Vec<(isize, isize, isize)> {
-    vec![
-        (x - 1, y, z),
-        (x + 1, y, z),
-        (x, y - 1, z),
-        (x, y + 1, z),
-        (x - 1, y - 1, z),
-        (x - 1, y + 1, z),
-        (x + 1, y - 1, z),
-        (x + 1, y + 1, z),
-        (x - 1, y, z - 1),
-        (x - 1, y - 1, z - 1),
-        (x - 1, y + 1, z - 1),
-        (x + 1, y, z - 1),
-        (x + 1, y - 1, z - 1),
-        (x + 1, y + 1, z - 1),
-        (x, y - 1, z - 1),
-        (x, y, z - 1),
-        (x, y + 1, z - 1),
-        (x - 1, y, z + 1),
-        (x - 1, y - 1, z + 1),
-        (x - 1, y + 1, z + 1),
-        (x + 1, y, z + 1),
-        (x + 1, y - 1, z + 1),
-        (x + 1, y + 1, z + 1),
-        (x, y - 1, z + 1),
-        (x, y, z + 1),
-        (x, y + 1, z + 1),
-    ]
-}
-fn return_neighbors_for_coord_part2(
-    x: isize,
-    y: isize,
-    z: isize,
-    t: isize,
-) -> Vec<(isize, isize, isize, isize)> {
-    vec![
-        (x - 1, y, z, t - 1),
-        (x + 1, y, z, t - 1),
-        (x, y - 1, z, t - 1),
-        (x, y + 1, z, t - 1),
-        (x - 1, y - 1, z, t - 1),
-        (x - 1, y + 1, z, t - 1),
-        (x + 1, y - 1, z, t - 1),
-        (x + 1, y + 1, z, t - 1),
-        (x - 1, y, z - 1, t - 1),
-        (x - 1, y - 1, z - 1, t - 1),
-        (x - 1, y + 1, z - 1, t - 1),
-        (x + 1, y, z - 1, t - 1),
-        (x + 1, y - 1, z - 1, t - 1),
-        (x + 1, y + 1, z - 1, t - 1),
-        (x, y - 1, z - 1, t - 1),
-        (x, y, z - 1, t - 1),
-        (x, y + 1, z - 1, t - 1),
-        (x - 1, y, z + 1, t - 1),
-        (x - 1, y - 1, z + 1, t - 1),
-        (x - 1, y + 1, z + 1, t - 1),
-        (x + 1, y, z + 1, t - 1),
-        (x + 1, y - 1, z + 1, t - 1),
-        (x + 1, y + 1, z + 1, t - 1),
-        (x, y - 1, z + 1, t - 1),
-        (x, y, z + 1, t - 1),
-        (x, y + 1, z + 1, t - 1),
-        (x, y, z, t - 1),
-        (x - 1, y, z, t + 1),
-        (x + 1, y, z, t + 1),
-        (x, y - 1, z, t + 1),
-        (x, y + 1, z, t + 1),
-        (x - 1, y - 1, z, t + 1),
-        (x - 1, y + 1, z, t + 1),
-        (x + 1, y - 1, z, t + 1),
-        (x + 1, y + 1, z, t + 1),
-        (x - 1, y, z - 1, t + 1),
-        (x - 1, y - 1, z - 1, t + 1),
-        (x - 1, y + 1, z - 1, t + 1),
-        (x + 1, y, z - 1, t + 1),
-        (x + 1, y - 1, z - 1, t + 1),
-        (x + 1, y + 1, z - 1, t + 1),
-        (x, y - 1, z - 1, t + 1),
-        (x, y, z - 1, t + 1),
-        (x, y + 1, z - 1, t + 1),
-        (x - 1, y, z + 1, t + 1),
-        (x - 1, y - 1, z + 1, t + 1),
-        (x - 1, y + 1, z + 1, t + 1),
-        (x + 1, y, z + 1, t + 1),
-        (x + 1, y - 1, z + 1, t + 1),
-        (x + 1, y + 1, z + 1, t + 1),
-        (x, y - 1, z + 1, t + 1),
-        (x, y, z + 1, t + 1),
-        (x, y + 1, z + 1, t + 1),
-        (x, y, z, t + 1),
-        (x - 1, y, z, t),
-        (x + 1, y, z, t),
-        (x, y - 1, z, t),
-        (x, y + 1, z, t),
-        (x - 1, y - 1, z, t),
-        (x - 1, y + 1, z, t),
-        (x + 1, y - 1, z, t),
-        (x + 1, y + 1, z, t),
-        (x - 1, y, z - 1, t),
-        (x - 1, y - 1, z - 1, t),
-        (x - 1, y + 1, z - 1, t),
-        (x + 1, y, z - 1, t),
-        (x + 1, y - 1, z - 1, t),
-        (x + 1, y + 1, z - 1, t),
-        (x, y - 1, z - 1, t),
-        (x, y, z - 1, t),
-        (x, y + 1, z - 1, t),
-        (x - 1, y, z + 1, t),
-        (x - 1, y - 1, z + 1, t),
-        (x - 1, y + 1, z + 1, t),
-        (x + 1, y, z + 1, t),
-        (x + 1, y - 1, z + 1, t),
-        (x + 1, y + 1, z + 1, t),
-        (x, y - 1, z + 1, t),
-        (x, y, z + 1, t),
-        (x, y + 1, z + 1, t),
-    ]
+type Cell<const N: usize> = [i8; N];
+
+fn neighbors<const N: usize>(cell: Cell<N>) -> impl Iterator<Item = Cell<N>> {
+    let total = 3usize.pow(N as u32);
+    (0..total)
+        .filter(move |&i| i != total / 2) // middle index = all-zero offset
+        .map(move |mut i| {
+            let mut out = cell;
+            for c in &mut out {
+                *c += (i % 3) as i8 - 1;
+                i /= 3;
+            }
+            out
+        })
 }
 
-#[derive(Debug, Clone)]
-pub struct Region(HashSet<(isize, isize, isize)>);
-
-#[derive(Debug, Clone)]
-pub struct Region2(HashSet<(isize, isize, isize, isize)>);
-
-impl Region {
-    pub fn parse(input: &str) -> Self {
-        let mut region: HashSet<(isize, isize, isize)> = HashSet::new();
-
-        input.lines().enumerate().for_each(|(y, l)| {
-            l.chars()
+fn parse<const N: usize>(input: &str) -> HashSet<Cell<N>> {
+    input
+        .lines()
+        .enumerate()
+        .flat_map(|(y, line)| {
+            line.bytes()
                 .enumerate()
-                .filter(|(_, c)| *c == '#')
-                .for_each(|(x, _)| {
-                    region.insert((x as isize, y as isize, 0));
-                });
-        });
-
-        Self(region)
-    }
-
-    pub fn count_active_neighbors_at_coord(&self, x: isize, y: isize, z: isize) -> u8 {
-        let neighbors = return_neighbors_for_coord(x, y, z);
-
-        neighbors.iter().filter(|n| self.0.contains(*n)).count() as u8
-    }
-
-    pub fn process(&mut self) {
-        let mut new_region = self.clone();
-
-        self.0.iter().for_each(|c| {
-            let neighbors = return_neighbors_for_coord(c.0, c.1, c.2);
-
-            neighbors.iter().chain(std::iter::once(c)).for_each(|n| {
-                let is_active = self.0.contains(n);
-                match (
-                    is_active,
-                    self.count_active_neighbors_at_coord(n.0, n.1, n.2),
-                ) {
-                    (true, 0..2 | 4..) => {
-                        new_region.0.remove(n);
-                    }
-                    (false, 3) => {
-                        new_region.0.insert(*n);
-                    }
-                    _ => {}
-                }
-            })
-        });
-
-        self.0 = new_region.0;
-    }
+                .filter(|&(_, b)| b == b'#')
+                .map(move |(x, _)| {
+                    let mut cell = [0; N];
+                    cell[0] = x as i8;
+                    cell[1] = y as i8;
+                    cell
+                })
+        })
+        .collect()
 }
-impl Region2 {
-    pub fn parse(input: &str) -> Self {
-        let mut region: HashSet<(isize, isize, isize, isize)> = HashSet::new();
 
-        input.lines().enumerate().for_each(|(y, l)| {
-            l.chars()
-                .enumerate()
-                .filter(|(_, c)| *c == '#')
-                .for_each(|(x, _)| {
-                    region.insert((x as isize, y as isize, 0, 0));
-                });
-        });
-
-        Self(region)
+fn step<const N: usize>(active: &HashSet<Cell<N>>) -> HashSet<Cell<N>> {
+    let mut counts: HashMap<Cell<N>, u8> = HashMap::new();
+    for &cell in active {
+        for n in neighbors(cell) {
+            *counts.entry(n).or_default() += 1;
+        }
     }
+    counts
+        .into_iter()
+        .filter(|&(cell, n)| n == 3 || (n == 2 && active.contains(&cell)))
+        .map(|(cell, _)| cell)
+        .collect()
+}
 
-    pub fn count_active_neighbors_at_coord(&self, c: (isize, isize, isize, isize)) -> u8 {
-        let neighbors = return_neighbors_for_coord_part2(c.0, c.1, c.2, c.3);
-
-        neighbors.iter().filter(|n| self.0.contains(*n)).count() as u8
+fn solve<const N: usize>(input: &str) -> usize {
+    let mut active = parse::<N>(input);
+    for _ in 0..6 {
+        active = step(&active);
     }
-
-    pub fn process(&mut self) {
-        let mut new_region = self.clone();
-
-        self.0.iter().for_each(|c| {
-            let neighbors = return_neighbors_for_coord_part2(c.0, c.1, c.2, c.3);
-
-            neighbors.iter().chain(std::iter::once(c)).for_each(|n| {
-                let is_active = self.0.contains(n);
-                match (is_active, self.count_active_neighbors_at_coord(*n)) {
-                    (true, 0..2 | 4..) => {
-                        new_region.0.remove(n);
-                    }
-                    (false, 3) => {
-                        new_region.0.insert(*n);
-                    }
-                    _ => {}
-                }
-            })
-        });
-
-        self.0 = new_region.0;
-    }
+    active.len()
 }
 
 pub fn part_one(input: &str) -> Option<usize> {
-    let mut region = Region::parse(input);
-
-    (0..6).for_each(|_| {
-        region.process();
-    });
-
-    Some(region.0.len())
+    Some(solve::<3>(input))
 }
 
 pub fn part_two(input: &str) -> Option<usize> {
-    let mut region = Region2::parse(input);
-
-    (0..6).for_each(|_| {
-        region.process();
-    });
-
-    Some(region.0.len())
+    Some(solve::<4>(input))
 }
 
 #[cfg(test)]
