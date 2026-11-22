@@ -1,232 +1,217 @@
 advent_of_code::solution!(11);
 
-const DIRECTIONS: [(i32, i32); 8] = [
+use std::mem;
+
+/// An occupied seat empties once this many adjacent seats are occupied.
+const ADJACENT_TOLERANCE: u8 = 4;
+/// An occupied seat empties once this many visible seats are occupied.
+const VISIBLE_TOLERANCE: u8 = 5;
+
+const DIRECTIONS: [(isize, isize); 8] = [
     (-1, -1),
-    (-1, 0),
-    (-1, 1),
     (0, -1),
-    (0, 1),
     (1, -1),
+    (-1, 0),
     (1, 0),
+    (-1, 1),
+    (0, 1),
     (1, 1),
 ];
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PositionType {
-    Occupied,
-    Empty,
-    Floor,
+/// Index of a seat in the compact, floor-free seat list.
+type SeatId = u32;
+
+/// Which seats count as neighbours of a seat.
+#[derive(Clone, Copy)]
+enum NeighbourRule {
+    /// The seats in the eight surrounding cells.
+    Adjacent,
+    /// The first seat seen in each of the eight directions, looking past floor.
+    Visible,
 }
 
-#[derive(Clone, Debug)]
-pub struct Grid {
-    positions: Vec<PositionType>,
-    next_positions: Vec<PositionType>,
-    height: usize,
+/// The neighbours of one seat. There are at most eight, so they are stored
+/// inline rather than in a per-seat heap allocation.
+#[derive(Clone, Copy, Default)]
+struct Neighbours {
+    seats: [SeatId; DIRECTIONS.len()],
+    len: usize,
+}
+
+impl Neighbours {
+    fn as_slice(&self) -> &[SeatId] {
+        &self.seats[..self.len]
+    }
+}
+
+impl FromIterator<SeatId> for Neighbours {
+    fn from_iter<I: IntoIterator<Item = SeatId>>(iter: I) -> Self {
+        let mut neighbours = Self::default();
+        for seat in iter {
+            neighbours.seats[neighbours.len] = seat;
+            neighbours.len += 1;
+        }
+        neighbours
+    }
+}
+
+/// The waiting area: where the seats are, and which start out occupied.
+struct Layout {
     width: usize,
-    current_position: usize,
+    height: usize,
+    /// One entry per grid cell in row-major order; `None` is floor.
+    seat_at: Vec<Option<SeatId>>,
+    /// Initial occupancy, indexed by `SeatId`.
+    occupied: Vec<bool>,
 }
 
-impl Grid {
-    pub fn new(width: usize, height: usize) -> Self {
+impl Layout {
+    fn parse(input: &str) -> Self {
+        let lines: Vec<&str> = input.lines().map(str::trim).collect();
+        let width = lines.first().map_or(0, |line| line.len());
+
+        let mut occupied = Vec::new();
+        let mut seat_at = Vec::with_capacity(width * lines.len());
+        for line in &lines {
+            assert_eq!(line.len(), width, "all rows must have the same width");
+            for byte in line.bytes() {
+                let seat = match byte {
+                    b'.' => None,
+                    b'L' => Some(false),
+                    b'#' => Some(true),
+                    other => panic!("Invalid {:?} found while parsing", char::from(other)),
+                };
+                seat_at.push(seat.map(|is_occupied| {
+                    let id = SeatId::try_from(occupied.len()).expect("seat count fits in SeatId");
+                    occupied.push(is_occupied);
+                    id
+                }));
+            }
+        }
+
         Self {
-            positions: vec![PositionType::Floor; width * height],
-            next_positions: vec![PositionType::Floor; width * height],
             width,
-            height,
-            current_position: 0,
+            height: lines.len(),
+            seat_at,
+            occupied,
         }
     }
-    fn get_index(&self, x: usize, y: usize) -> usize {
-        assert!(x < self.width);
-        assert!(y < self.height);
-        self.get_index_checked(x as i32, y as i32).unwrap()
-    }
-    fn get_index_checked(&self, x: i32, y: i32) -> Option<usize> {
-        if x < 0 || y < 0 || x >= self.width as i32 || y >= self.height as i32 {
-            return None;
-        }
 
-        Some(y as usize * self.width + x as usize)
+    /// Moves one cell in `direction`, or returns `None` when that leaves the grid.
+    fn step(&self, (x, y): (usize, usize), (dx, dy): (isize, isize)) -> Option<(usize, usize)> {
+        let x = x.checked_add_signed(dx).filter(|&x| x < self.width)?;
+        let y = y.checked_add_signed(dy).filter(|&y| y < self.height)?;
+        Some((x, y))
     }
-    fn get_first_seat_in_direction(
+
+    /// The neighbouring seat of the cell at `position` in `direction`, if any.
+    fn neighbour_towards(
         &self,
-        dir_x: i32,
-        dir_y: i32,
-        x: i32,
-        y: i32,
-    ) -> Option<PositionType> {
-        let (new_x, new_y) = (x + dir_x, y + dir_y);
-
-        let index = self.get_index_checked(new_x, new_y)?;
-
-        match self.get_type_at_index(index) {
-            PositionType::Occupied => Some(PositionType::Occupied),
-            PositionType::Empty => Some(PositionType::Empty),
-            PositionType::Floor => self.get_first_seat_in_direction(dir_x, dir_y, new_x, new_y),
+        mut position: (usize, usize),
+        direction: (isize, isize),
+        rule: NeighbourRule,
+    ) -> Option<SeatId> {
+        loop {
+            position = self.step(position, direction)?;
+            let (x, y) = position;
+            match (self.seat_at[y * self.width + x], rule) {
+                (Some(seat), _) => return Some(seat),
+                (None, NeighbourRule::Adjacent) => return None,
+                (None, NeighbourRule::Visible) => {}
+            }
         }
     }
-    pub fn get_pos(&self, x: usize, y: usize) -> &PositionType {
-        let index = self.get_index(x, y);
-        self.get_type_at_index(index)
-    }
-    pub fn get_type_at_index(&self, index: usize) -> &PositionType {
-        self.positions.get(index).unwrap()
-    }
-    pub fn set_pos(&mut self, x: usize, y: usize, position_type: PositionType) {
-        let index = self.get_index(x, y);
 
-        *self.positions.get_mut(index).unwrap() = position_type;
-    }
-    pub fn set_next_pos(&mut self, x: usize, y: usize, position_type: PositionType) {
-        let index = self.get_index(x, y);
-
-        *self.next_positions.get_mut(index).unwrap() = position_type;
-    }
-    pub fn get_adjacent_occupancies_count(&self, x: i32, y: i32) -> usize {
-        DIRECTIONS
-            .iter()
-            .map(|(dir_x, dir_y)| (x + dir_x, y + dir_y))
-            .filter_map(|(x, y)| self.get_index_checked(x, y))
-            .map(|index| self.get_type_at_index(index))
-            .filter(|&&position_type| position_type == PositionType::Occupied)
-            .count()
-    }
-    pub fn get_adjacent_occupancies_count_2(&self, x: i32, y: i32) -> usize {
-        // TODO: get first seat upward, first seat diagonal up right, etc.
-        DIRECTIONS
-            .iter()
-            .filter_map(|(dir_x, dir_y)| self.get_first_seat_in_direction(*dir_x, *dir_y, x, y))
-            .filter(|&position_type| position_type == PositionType::Occupied)
-            .count()
-    }
-    pub fn append(&mut self, position_type: PositionType) {
-        self.positions[self.current_position] = position_type;
-        self.current_position += 1;
-    }
-    pub fn count_occupied(&self) -> usize {
-        self.positions
-            .iter()
-            .filter(|&&p| p == PositionType::Occupied)
-            .count()
-    }
-    // returns changed state count
-    pub fn advance_state(&mut self) -> Option<usize> {
-        self.next_positions = self.positions.clone();
-        let mut change_count = 0;
-        (0..self.height).for_each(|y| {
-            (0..self.width).for_each(|x| {
-                let adjacencies = self.get_adjacent_occupancies_count(x as i32, y as i32);
-                match (self.get_pos(x, y), adjacencies) {
-                    (PositionType::Empty, 0) => {
-                        change_count += 1;
-                        self.set_next_pos(x, y, PositionType::Occupied);
-                        // becomes occupied
-                    }
-                    (PositionType::Occupied, 4..=8) => {
-                        change_count += 1;
-                        self.set_next_pos(x, y, PositionType::Empty);
-                        // becomes empty
-                    }
-                    _ => {
-                        // no change
-                    }
-                }
+    /// The neighbours of every seat, indexed by `SeatId`. Floor never changes,
+    /// so this is computed once and holds for the whole simulation.
+    fn neighbours(&self, rule: NeighbourRule) -> Vec<Neighbours> {
+        (0..self.height)
+            .flat_map(|y| (0..self.width).map(move |x| (x, y)))
+            .filter(|&(x, y)| self.seat_at[y * self.width + x].is_some())
+            .map(|position| {
+                DIRECTIONS
+                    .iter()
+                    .filter_map(|&direction| self.neighbour_towards(position, direction, rule))
+                    .collect()
             })
-        });
-        if change_count > 0 {
-            std::mem::swap(&mut self.positions, &mut self.next_positions);
+            .collect()
+    }
+}
 
-            return Some(change_count);
+/// Applies the seating rules until nobody moves, then counts the occupied seats.
+fn occupied_when_stable(
+    mut occupied: Vec<bool>,
+    neighbours: &[Neighbours],
+    tolerance: u8,
+) -> usize {
+    let seat_count = occupied.len();
+
+    // Kept up to date as seats flip, rather than recounted every generation.
+    let mut occupied_neighbours = vec![0u8; seat_count];
+    for (neighbours, &is_occupied) in neighbours.iter().zip(&occupied) {
+        if is_occupied {
+            for &neighbour in neighbours.as_slice() {
+                occupied_neighbours[neighbour as usize] += 1;
+            }
+        }
+    }
+
+    // A seat's fate depends only on its own state and its occupied-neighbour
+    // count, so after the first generation only the neighbours of seats that
+    // just flipped can flip next. A seat that flipped while its neighbours
+    // stayed put is already settled: its count is unchanged, and that count
+    // is what put it in its new state.
+    let mut needs_check = vec![true; seat_count];
+    let mut flips = Vec::new();
+
+    loop {
+        // Decide every flip from the counts as they stand before applying any.
+        flips.clear();
+        for seat in 0..seat_count {
+            if !mem::take(&mut needs_check[seat]) {
+                continue;
+            }
+            let must_flip = if occupied[seat] {
+                occupied_neighbours[seat] >= tolerance
+            } else {
+                occupied_neighbours[seat] == 0
+            };
+            if must_flip {
+                flips.push(seat);
+            }
+        }
+        if flips.is_empty() {
+            return occupied.iter().filter(|&&is_occupied| is_occupied).count();
         }
 
-        None
-    }
-    pub fn advance_state_2(&mut self) -> Option<usize> {
-        let mut change_count = 0;
-        (0..self.height).for_each(|y| {
-            (0..self.width).for_each(|x| {
-                let adjacencies = self.get_adjacent_occupancies_count_2(x as i32, y as i32);
-                match (self.get_pos(x, y), adjacencies) {
-                    (PositionType::Empty, 0) => {
-                        change_count += 1;
-                        self.set_next_pos(x, y, PositionType::Occupied);
-                        // becomes occupied
-                    }
-                    (PositionType::Occupied, 5..=8) => {
-                        change_count += 1;
-                        self.set_next_pos(x, y, PositionType::Empty);
-                        // becomes empty
-                    }
-                    (position_type, _) => {
-                        self.set_next_pos(x, y, *position_type);
-                        // no change
-                    }
+        for &seat in &flips {
+            let now_occupied = !occupied[seat];
+            occupied[seat] = now_occupied;
+            for &neighbour in neighbours[seat].as_slice() {
+                let neighbour = neighbour as usize;
+                if now_occupied {
+                    occupied_neighbours[neighbour] += 1;
+                } else {
+                    occupied_neighbours[neighbour] -= 1;
                 }
-            })
-        });
-        if change_count > 0 {
-            std::mem::swap(&mut self.positions, &mut self.next_positions);
-
-            return Some(change_count);
+                needs_check[neighbour] = true;
+            }
         }
-
-        None
     }
+}
+
+fn solve(input: &str, rule: NeighbourRule, tolerance: u8) -> usize {
+    let layout = Layout::parse(input);
+    let neighbours = layout.neighbours(rule);
+    occupied_when_stable(layout.occupied, &neighbours, tolerance)
 }
 
 pub fn part_one(input: &str) -> Option<usize> {
-    let lines: Vec<_> = input.lines().map(|l| l.trim()).collect();
-
-    let width = lines.first().unwrap().chars().collect::<Vec<_>>().len();
-    let height = lines.len();
-    let mut grid = Grid::new(width, height);
-
-    lines.iter().for_each(|line| {
-        line.chars()
-            .map(|c| match c {
-                'L' => PositionType::Empty,
-                '.' => PositionType::Floor,
-                '#' => PositionType::Occupied,
-                x => unreachable!("Invalid {x:?} found while parsing"),
-            })
-            .for_each(|position_type| {
-                grid.append(position_type);
-            });
-    });
-
-    while grid.advance_state().is_some() {
-        // advance
-    }
-
-    Some(grid.count_occupied())
+    Some(solve(input, NeighbourRule::Adjacent, ADJACENT_TOLERANCE))
 }
 
 pub fn part_two(input: &str) -> Option<usize> {
-    let lines: Vec<_> = input.lines().map(|l| l.trim()).collect();
-
-    let width = lines.first().unwrap().chars().collect::<Vec<_>>().len();
-    let height = lines.len();
-    let mut grid = Grid::new(width, height);
-
-    lines.iter().for_each(|line| {
-        line.chars()
-            .map(|c| match c {
-                'L' => PositionType::Empty,
-                '.' => PositionType::Floor,
-                '#' => PositionType::Occupied,
-                x => unreachable!("Invalid {x:?} found while parsing"),
-            })
-            .for_each(|position_type| {
-                grid.append(position_type);
-            });
-    });
-
-    while grid.advance_state_2().is_some() {
-        // advance
-    }
-
-    Some(grid.count_occupied())
+    Some(solve(input, NeighbourRule::Visible, VISIBLE_TOLERANCE))
 }
 
 #[cfg(test)]

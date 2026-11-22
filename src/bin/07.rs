@@ -1,35 +1,29 @@
-use hashbrown::HashSet;
+use hashbrown::{HashMap, HashSet};
 
 advent_of_code::solution!(7);
 
-pub struct BagRule {
-    color: String,
-    contains: Vec<(u64, String)>,
+pub struct BagRule<'a> {
+    color: &'a str,
+    contains: Vec<(u64, &'a str)>,
 }
 
-impl BagRule {
-    pub fn new(color: String, contains: Vec<(u64, String)>) -> Self {
+impl<'a> BagRule<'a> {
+    pub fn new(color: &'a str, contains: Vec<(u64, &'a str)>) -> Self {
         Self { color, contains }
     }
 
-    pub fn parse(input: &str) -> Self {
-        let parts: Vec<&str> = input.split(" bags contain ").collect();
-        let color = parts[0].to_string();
-        let contains = if parts[1] == "no other bags." {
+    pub fn parse(input: &'a str) -> Self {
+        let (color, contents) = input.split_once(" bags contain ").unwrap();
+        let contains = if contents == "no other bags." {
             vec![]
         } else {
-            parts[1]
+            contents
                 .trim_end_matches('.')
                 .split(", ")
                 .map(|s| {
                     let s = s.trim_end_matches(" bags").trim_end_matches(" bag");
-                    let count = s.split_whitespace().next().unwrap().parse::<u64>().unwrap();
-                    let color = s
-                        .split_whitespace()
-                        .skip(1)
-                        .collect::<Vec<&str>>()
-                        .join(" ");
-                    (count, color)
+                    let (count, color) = s.split_once(' ').unwrap();
+                    (count.parse::<u64>().unwrap(), color)
                 })
                 .collect()
         };
@@ -38,24 +32,25 @@ impl BagRule {
 }
 
 pub fn part_one(input: &str) -> Option<usize> {
-    let bag_rules = input.lines().map(BagRule::parse).collect::<Vec<BagRule>>();
+    let rules: Vec<BagRule> = input.lines().map(BagRule::parse).collect();
 
-    let mut queue = vec!["shiny gold"];
-    let mut visited = HashSet::new();
-    while let Some(color) = queue.pop() {
-        if visited.contains(color) {
-            continue;
-        }
-        visited.insert(color);
-        for rule in &bag_rules {
-            if rule.contains.iter().any(|(_, c)| c == color) {
-                queue.push(&rule.color);
-            }
+    let mut parents: HashMap<&str, Vec<&str>> = HashMap::new();
+    for rule in &rules {
+        for &(_, inner) in &rule.contains {
+            parents.entry(inner).or_default().push(rule.color);
         }
     }
 
-    // Remove the "shiny gold" bag itself from the count
-    Some(visited.len() - 1)
+    let mut stack = vec!["shiny gold"];
+    let mut visited = HashSet::new();
+    while let Some(color) = stack.pop() {
+        for &outer in parents.get(color).into_iter().flatten() {
+            if visited.insert(outer) {
+                stack.push(outer);
+            }
+        }
+    }
+    Some(visited.len())
 }
 
 pub fn part_two(input: &str) -> Option<u64> {
@@ -68,7 +63,7 @@ pub fn part_two(input: &str) -> Option<u64> {
             .iter()
             .filter(|rule| rule.color == color)
             .for_each(|rule| {
-                for (c, inner_color) in &rule.contains {
+                for &(c, inner_color) in &rule.contains {
                     total_bags += c * count;
                     queue.push((inner_color, c * count));
                 }
