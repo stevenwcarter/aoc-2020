@@ -98,9 +98,12 @@ pub fn part_one(input: &str) -> Option<String> {
 pub fn part_two(input: &str) -> Option<u64> {
     let mut cups = Cups::parse(input, PART_TWO_CUPS)?;
     cups.play(PART_TWO_MOVES);
-    let first = cups.after(1);
-    let second = cups.after(first);
-    Some(u64::from(first) * u64::from(second))
+    Some(
+        cups.labels_after_one()
+            .take(2)
+            .map(|l| l as u64)
+            .product::<u64>(),
+    )
 }
 
 #[cfg(test)]
