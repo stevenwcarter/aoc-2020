@@ -1,5 +1,4 @@
 use std::collections::VecDeque;
-use std::hash::{DefaultHasher, Hash, Hasher};
 
 use hashbrown::HashSet;
 
@@ -59,14 +58,7 @@ impl Deck {
             winning_hand = self.player2.clone();
         }
 
-        Some(
-            winning_hand
-                .iter()
-                .rev()
-                .enumerate()
-                .map(|(i, v)| *v as usize * (i + 1))
-                .sum(),
-        )
+        score_winning_hand(&winning_hand)
     }
 
     pub fn draw(&mut self) -> Option<(u8, u8)> {
@@ -78,6 +70,37 @@ impl Deck {
             self.player2.pop_front().unwrap(),
         ))
     }
+
+    /// Cheap multiply-rotate fingerprint of both hands, used for repeat detection.
+    /// Much faster than SipHash; a separator keeps the two hands distinct.
+    pub fn fingerprint(&self) -> u64 {
+        const K: u64 = 0x9E37_79B9_7F4A_7C15;
+        const SEPARATOR: u64 = 0xFF;
+        let mix = |h: u64, v: u64| (h.rotate_left(5) ^ v).wrapping_mul(K);
+
+        let h = self.player1.iter().fold(0, |h, &c| mix(h, u64::from(c)));
+        let h = mix(h, SEPARATOR);
+        let h = self.player2.iter().fold(h, |h, &c| mix(h, u64::from(c)));
+        h ^ (h >> 29)
+    }
+
+    /// Whether player 1 holds the highest card. In a sub-game that guarantees a
+    /// player 1 win: the highest card is at least the number of cards in play, so
+    /// it can never trigger a recursion and is never lost, leaving player 1 to
+    /// win either outright or through the repeat rule.
+    pub fn player1_holds_max(&self) -> bool {
+        self.player1.iter().max() > self.player2.iter().max()
+    }
+}
+
+pub fn score_winning_hand(hand: &VecDeque<u8>) -> Option<usize> {
+    Some(
+        hand.iter()
+            .rev()
+            .enumerate()
+            .map(|(i, v)| *v as usize * (i + 1))
+            .sum(),
+    )
 }
 
 /// Game struct for round 2, since we need to track separate game states recursively
@@ -91,12 +114,6 @@ pub enum Player {
     Two,
 }
 
-fn calculate_hash<T: Hash>(item: &T) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    item.hash(&mut hasher);
-    hasher.finish()
-}
-
 use Player::*;
 
 impl Game {
@@ -108,7 +125,7 @@ impl Game {
     }
 
     pub fn round(&mut self) -> Option<Player> {
-        if !self.tracked_states.insert(calculate_hash(&self.deck)) {
+        if !self.tracked_states.insert(self.deck.fingerprint()) {
             return Some(One);
         }
         let cards = self.deck.draw();
@@ -127,10 +144,26 @@ impl Game {
 
         let result =
             if p1 as usize <= self.deck.player1.len() && p2 as usize <= self.deck.player2.len() {
-                let player1 = VecDeque::from_iter(self.deck.player1.clone().drain(..(p1 as usize)));
-                let player2 = VecDeque::from_iter(self.deck.player2.clone().drain(..(p2 as usize)));
+                let player1 = self
+                    .deck
+                    .player1
+                    .iter()
+                    .take(p1 as usize)
+                    .copied()
+                    .collect();
+                let player2 = self
+                    .deck
+                    .player2
+                    .iter()
+                    .take(p2 as usize)
+                    .copied()
+                    .collect();
                 let deck = Deck { player1, player2 };
-                Game::new(deck).play()
+                if deck.player1_holds_max() {
+                    Some(One)
+                } else {
+                    Game::new(deck).play()
+                }
             } else {
                 if p1 > p2 {
                     Some(One)
@@ -182,18 +215,11 @@ pub fn part_two(input: &str) -> Option<usize> {
 
     let winner = game.play().unwrap();
     let winning_hand = match winner {
-        One => game.deck.player1,
-        Two => game.deck.player2,
+        One => &game.deck.player1,
+        Two => &game.deck.player2,
     };
 
-    Some(
-        winning_hand
-            .iter()
-            .rev()
-            .enumerate()
-            .map(|(i, v)| *v as usize * (i + 1))
-            .sum(),
-    )
+    score_winning_hand(winning_hand)
 }
 
 #[cfg(test)]
